@@ -1,74 +1,75 @@
-# Sakura FX v3.1 — ZAR/JPY ChatGPT 只读镜像原型
+# FX → GitHub → ChatGPT：ZARJPY 只读镜像
 
-本仓库仅增加行情的第二个出口，不改变现有 Sakura API、launcher 或交易逻辑。
-当前 zarjpy.json 是 **example / tradable=false**，没有价格、没有伪造时间戳，不能用于交易。
-同步器尚未接入 Sakura；尚未核实真实 analysis 字段与数据提供商的再分发许可。
-不要把本原型描述成已经运行的实时服务。
+只增加镜像，不改变 Twelve Data → Cloudflare → Sakura v3.1 的 API、launcher、PATH nonce 或其他货币。
+当前 data/zarjpy.json 是从现有 Sakura fresh analysis 取得的真实单次快照，**未在 Sakura 部署自动同步**。
+文件可随时间过期；上传成功、HTTP 200 或能看到价格不等于实时可用。
 
-## 文件与读取入口
+## 固定 RAW URL
 
-- zarjpy.json：根目录固定镜像入口；目前是空示例。
-- mirror.py：Python 3.9+ 标准库同步原型；校验、完整包装 analysis、GET SHA / PUT GitHub。
-- tests/test_mirror.py：时间、保真、重复发布、安全拒绝等离线检查。
-- examples/export.example.json：输入结构示例，不包含真实市场数据。
-- .gitignore：排除私密输入、环境文件、密钥、日志。
-- DEPLOYMENT.md：Sakura 端接入和公开读取验收。
+https://raw.githubusercontent.com/nnnnkatsu/fx-chatgpt-mirror/main/data/zarjpy.json
 
-发布后固定读取：
-https://raw.githubusercontent.com/nnnnkatsu/fx-chatgpt-mirror/main/zarjpy.json
+- data/zarjpy.json：唯一正式镜像路径。
+- mirror.py：读取现有 analysis 文件，校验后通过 GitHub Contents API 推送同一份行情。
+- DEPLOYMENT.md：Sakura 最小接入、令牌配置、重试和验收。
+- tests/test_mirror.py：离线保真、时间、安全拒绝与冲突重试测试。
+- 根目录 zarjpy.json：旧版不可交易示例，仅为保留旧链接；不再更新，不用于监测。
+- examples/export.example.json：旧版输入格式示例，已不供新版脚本使用。
 
-## JSON 契约 v1.0
+## 原数据保留原则
 
-|字段|含义|
-|---|---|
-|source|固定 sakura-v3.1；只是来源标签，不是数字签名|
-|pair|固定 ZARJPY|
-|status|example 或 live；live 仅代表已校验并导出，不是买卖信号|
-|tradable|本原型始终 false；不自动授权交易|
-|analysis|Sakura 原始公开 analysis 对象，字段/数组/值尽量保留，不重新算指标；JSON 空白/数字文本格式不保证逐字节一致|
-|generated_at_utc|原始 analysis 生成时间；禁止拿上传时间填充|
-|fetched_at_utc|该导出依赖的行情最近成功获取时间；多周期使用其中最早的获取时间，不能用缓存命中时间|
-|mirrored_at_utc|本次包装时刻；不等于行情更新时间，也不保证 PUT 完成时间|
-|latest_candle_at_utc|1min 最新蜡烛的开盘时刻；不能把 H1/H4 的时间冒充 1min|
-|candle_age_seconds|包装时刻减 1min 开盘时刻；读取时必须重算|
-|freshness_by_timeframe|每个周期的开盘 UTC、是否已收盘、包装时刻计算的年龄|
+真实接口为：
+`ok / type / symbol / price / fetched_at_utc / cache_seconds / source / analysis`。
+analysis 原来就包含六个周期：1min、5min、15min、1h、4h、1day。
+各周期包含 timezone、latest_candle_at_utc、candle_age_seconds、current_candle、
+previous_closed_candle、indicators、structure、candles。全部保留，不重算技术指标。
 
-UTC 全部使用带 Z 的 ISO 8601。未知时间保留 null 并禁止发布 live；不得猜测时区。
-未取得真实源结构前，metadata 是待接入的显式适配契约，不是假定 Sakura 已有这些字段。
-必须核实 analysis 中品种、各周期末根蜡烛和 metadata 一致；只有经检查的公开字段才可进入导出。
-脚本检测凭据样式是第二层防线，不能保证识别任意字段中隐藏的密钥。
+源 source="Twelve Data"，不会改写为 Sakura。Sakura 是传输路径而非行情供应商。
+仅在缺失时补 pair="ZARJPY"、generated_at_utc=null；
+新增 _mirror 保存传输来源、包装时间、原对象 SHA256 和 mode=snapshot。
+如果源以后提供 generated_at_utc，则原样保留。不存在的生成时间不能用 fetched 或上传时间冒充。
+SHA256 针对排序、紧凑序列化后的原 JSON 对象，是保真检查值，不是来源签名。
+保留 JSON 字段和值；不保证空白、键顺序、数字文字格式逐字节相同。
 
-## 读取方必须重新验证
+实际日线时间为 YYYY-MM-DDZ。它不是完整 ISO 时间；保留原值，校验时在源 timezone=UTC 条件下
+按该日期 00:00 UTC 解析，仅用于与源 candle_age 一致的年龄检查，不声称它是实际交易日开盘瞬间。
+current_candle 可能仍形成中，不自动视为收盘确认；收盘条件优先使用 previous_closed_candle。
 
-1. 先判断 status=live、source、pair、schema_version 和 analysis 非空。example 永远拒绝。
-2. 用读取时刻重算 now-generated 和 now-fetched，必须都在 0–300 秒；时间在未来也拒绝。
-3. 1min 最新开盘时刻年龄必须在 0–360 秒；H1/H4/D1 各自不超过周期长度+300秒。
-   多周期较旧蜡烛不能仅凭新 fetched 时间变成新行情。
-4. candle_age_seconds 只是导出快照值；raw CDN 缓存期间它不会自动增长。
-5. 依据 K 线收盘的交易规则只能使用 is_closed=true 的蜡烛；实际计划仍须读取足够历史 K 线。
-6. 缺字段、周期不全、过期、周末/节假日不更新：报告实时读取失败/市场休市，不能自动放宽时限。
-7. tradable=false 表示本原型尚未完成生产验收；通过读取校验也不能直接生成交易执行指令。
-   生产启用须完成真实源映射、市场状态/交易日历、数据授权、持续运行验收，再单独变更这个开关。
+## 新鲜度：每次读取重新计算
 
-主路径仍是 Sakura；只有主路径不可读时才读取镜像。镜像不新鲜则失败，不编造行情。
-公开 HTTP 成功只证明可访问；不证明数据新鲜、模型能读取完整内容、或定时任务已经配置。
-本次没有修改任何现有定时任务。
+1. ok=true、type=analysis、symbol=ZAR/JPY、pair=ZARJPY、source=Twelve Data；
+   price 为正数，六周期和指标完整，否则拒绝。
+2. now - fetched_at_utc 必须在 0–300 秒。未来时间拒绝。
+3. generated_at_utc 若有值：必须不早于 fetched、不晚于当前时刻，年龄≤300秒。
+   当前源没有该字段，因此 null 明确表示无法独立验证生成时间；
+   本阶段依据 fetched + 各周期蜡烛时间交叉校验，不把 null 解释为“刚生成”。
+   若某任务强制要求独立生成时间，该任务应拒绝此快照，直到源能提供真实值。
+4. analysis[周期].latest_candle_at_utc 必须与 current_candle.datetime_utc 一致。
+   读取时重算年龄：1min≤360秒、5min≤600秒、15min≤1200秒、
+   H1≤3900秒、H4≤14700秒、D1≤86700秒；均不得为负。
+5. 原 candle_age_seconds 是生成响应时的值，不会随着 GitHub 缓存自动增长。
+   必须与 fetched - latest 的差值在60秒内，并使用读取时重新计算的年龄判过期。
+6. 周末或源停止更新也不重写时间来“保鲜”。先判断市场状态，再决定报休市或读取失败。
+7. _mirror.mirrored_at_utc 只表示包装时刻，不能替代任何行情时间戳。
+   fetched 的精确上游语义目前由公开接口提供；未审阅 Worker/Sakura 源码，故不能证明所有周期都在该时刻重新向 Twelve Data 拉取。
+   蜡烛交叉检查能发现明显旧数据，但不能证明形成中蜡烛的每一个价格都最新。
 
-## 最小调用
+## 普通 ChatGPT 测试用规则
 
-先参考 examples/export.example.json，在服务器私有目录生成一份原子写入的完整 bundle。
-示例有固定历史时间和 public_export_reviewed=false，运行应拒绝，不能作为真实行情发布。
+先尝试 Sakura v3.1 launcher（保持原 PATH nonce 流程）。
+仅当网页读取层拒绝或无法取得可用数据时，打开上述 RAW 链接。
+按本 README 验证 freshness，合格才进行 ZARJPY D1/H4/H1 分析；
+两个来源都无法读取或镜像过期，输出【实时读取失败】。
+普通 web reader 是否可稳定读取要独立实测，不能由本机 HTTP 200 推断。
+
+本次不修改现有定时任务，不扩展其他三个货币。
+交易背景仅为用户提供的记录：2026-09-24 已全部止损，FLAT，后续是 NEW FIRST TRANCHE，
+不是加仓。Carry/宏观及任何入场条件仍需分析时重新核实；此项目不产生交易指令。
+
+## 本地验证
 
 ```sh
-python3 mirror.py /private/path/zarjpy-export.json --output /private/path/mirror-preview.json
-python3 mirror.py /private/path/zarjpy-export.json --publish
 python3 -m unittest discover -s tests -v
+python3 mirror.py /private/path/zarjpy-analysis.json --public-export-reviewed --output /private/path/preview.json
 ```
 
-令牌仅从服务器进程环境 FX_MIRROR_GITHUB_TOKEN 读取。
-使用仅限本仓库 Contents: read/write 的 fine-grained token；不要把令牌放入源码、命令行、URL、
-公开 JSON、日志或提交记录。不要复用 Twelve Data key。不要请求用户在聊天中粘贴密钥。
-GitHub Contents API：
-https://docs.github.com/en/rest/repos/contents#create-or-update-file-contents
-
-原型发布只更新根目录 zarjpy.json；无 GitHub Actions、无服务器凭据、无 API/launcher 改动。
+不要公开 private/、环境文件、服务器配置或任何密钥。
