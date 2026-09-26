@@ -1,91 +1,75 @@
-> 当前变更覆盖下方历史记录：仓库已改为被动本地缓存同步。原服务器轮询暂停因登录失效未保存成功；新脚本和响应落盘钩子尚未部署。下方“每2分钟自动运行”描述的是旧版本，不表示配额保护已上线。详见 QUOTA_PLAN.md。
+# Sakura ZARJPY 被动镜像部署
 
-# Sakura → GitHub 最小接入
+## 已部署状态（2026-09-26 UTC）
 
-## Deployment status: 2026-09-26 UTC
+已停止原先每两分钟重新请求 Sakura analysis 的轮询，替换为 **只读取本地 JSON** 的镜像。
+服务器 Python 3.8.12 标准库；不安装新依赖。
 
-Independent scripts: `/home/drexworld/fx-mirror/` (directory mode 700). Server runtime: Python 3.8.12 standard library. Original Sakura API, index.php, launcher and PATH nonce are unchanged. ZARJPY only.
-
-CRON: every 2 minutes, all days. Saved production command:
+- 运行目录：/home/drexworld/fx-mirror/（700）
+- 原响应副本：/home/drexworld/fx-mirror/cache/zarjpy-analysis.json（600）
+- 旁路函数：/home/drexworld/fx-mirror/capture.php
+- 发布去重记录：/home/drexworld/fx-mirror/published.json
+- Token：仅在 Sakura CRON 环境变量 FX_MIRROR_GITHUB_TOKEN
+- 频率：每两分钟检查本地文件；缓存缺失或过期不发起行情请求
+- 正式 CRON 命令：
 
 ```sh
 /usr/bin/env PATH=/usr/local/bin:/usr/bin:/bin python3 /home/drexworld/fx-mirror/sakura_runner.py >/dev/null 2>&1
 ```
 
-Token stays in Sakura CRON environment variable `FX_MIRROR_GITHUB_TOKEN`. The original proxy has no local analysis cache, so the independent runner requests the existing Sakura ZARJPY analysis endpoint using a fresh PATH nonce. It does not change the existing request handler.
+## 源响应保存
 
-Installed mirror.py and sakura_runner.py are pinned to commit `8ea291d99fc452911da1029a2d9c2c9296b0ba47`. Bootstrap installer commit: `69a8eff1df2882879278c2d143243b209cfb54cd`; downloads were SHA-256 checked. After installation, CRON was shortened to run local files directly.
+现有 /home/drexworld/www/fx/index.php 只增加一个独立旁路区块。
+它在现有请求已得到 HTTP 200 的 ZARJPY analysis 后，调用 capture.php 保存同一份 body。
+其他货币、price、各独立周期、HEAD 和失败响应不进入旁路。
+原来的 body、响应头、状态码、API 路径、launcher、PATH nonce 逻辑不变。
+没有为了镜像再请求一次 Sakura、Cloudflare 或 Twelve Data。
 
-Public sanitized health status: https://drexworld.sakura.ne.jp/fx-mirror-status.json
+文件锁避免同时写入，原子替换避免读到半份 JSON；旧 fetched 不覆盖更新结果。
+旁路失败被隔离，不改变原 API 响应。GitHub 发布在独立 CRON 中完成，不阻塞行情响应等待 GitHub。
 
-Observed automatic run: 2026-09-26T00:56:01.495Z, stage=freshness, ValueError. Independent source check: fetched_at_utc=2026-09-26T00:57:30.455Z, but 1min latest_candle_at_utc=2026-09-25T23:59:00Z and candle_age_seconds=3510. A new fetch does not make old candles fresh.
+## 部署证据
 
-Acceptance remains pending: two successful automated GitHub updates must show advancing fetched_at_utc and _mirror.mirrored_at_utc. Existing public JSON remains an old snapshot, unsuitable for live analysis. Cron continues automatically and attempts publication only after all freshness checks pass. Server token write permissions have not yet been proven by a successful publication.
+- 被动脚本来自 commit 74205122129176f5d90ab6ff4bdae4bb9d94132e；安装器 eb8d0b14cf4759e8974d7aa23eddfacae3dd7d69。
+- 旁路安装器 commit 4266c2bef9f0deec2a917218fd9a235c8293b1cc。
+- 2026-09-26T08:56:00.524853+00:00：旁路安装完成；PHP lint 与隔离功能测试均通过；测试没有真实行情调用。
+- 2026-09-26T08:58:00.085Z：正式被动 CRON 运行，stage=awaiting_local_source，upstream_requests=0。
+- launcher 无需调用行情即验证 HTTP 200，PATH nonce 对应本次请求，仍输出四币种各 price/analysis 共八条原路径。
+- 匿名 RAW 返回 HTTP 200，但 fetched_at_utc 仍为 2026-09-25T07:15:04.284Z，不可用于实时交易。
 
-The following sections are design/operations reference, not additional changes to the original API.
+原代理 SHA-256：
+303a7fb1109edad2f7d0e4a93bf4987cd01ce46c68d62ab8bf1f46c6ee123add
 
-## 推荐：在现有 analysis 成功生成后旁路投递
+安装后代理 SHA-256：
+b588f0ae4ca12b8fcb36ed0332fc85b90032cae7952be0063f51a3d30dae6815
 
-现有流程成功取得完整 ZARJPY analysis 后，把同一份 JSON 原子写到服务器私有文件/队列。
-同步工作进程读取该文件，运行：
-```sh
-python3 /private/fx-mirror/mirror.py /private/fx-mirror/zarjpy-analysis.json --public-export-reviewed --publish
-```
-不要再次请求 Twelve Data，不改任何 URL、launcher 或 PATH nonce。
-若已有完整 analysis 缓存，直接读该缓存，连主程序的写文件步骤也无需增加。
-如果只有内存响应，可添加一个旁路原子文件投递；具体插入位置需读取实际源码后确定。
-上传必须在独立任务中完成，不能让现有 HTTP 响应等待 GitHub。
-使用单实例任务/文件锁，避免多个同步进程同时处理；失败不影响现有接口。
+原文件备份（私有，不在 webroot）：
+/home/drexworld/fx-mirror/index.php.before-mirror.303a7fb1109edad2f7d0e4a93bf4987cd01ce46c68d62ab8bf1f46c6ee123add.bak
 
-可选每分钟消费已有快照（不是 GitHub Actions 反向抓取）：
-```cron
-* * * * * /usr/bin/flock -n /private/fx-mirror/sync.lock /private/fx-mirror/run-sync.sh
-```
-仅在主机存在 flock 时使用；否则用该主机的单实例调度。
-此仓库不安装调度任务，也不启动本机持续抓取替代 Sakura。
+仅删除标记为 “ZARJPY passive mirror: persist the existing response only.” 的新增区块即可撤销旁路；
+恢复备份前先检查当前文件是否有其他后续改动，不得覆盖无关修改。
+暂停镜像可将唯一镜像 CRON 命令设为 /usr/bin/true，原 API 不受影响。
 
-## Token 安全配置
+## 尚未完成的验收
 
-在 GitHub fine-grained PAT 页面创建仅访问 nnnnkatsu/fx-chatgpt-mirror 的 token，
-Repository permissions 仅需要 Contents: Read and write，并设置到期时间。
-https://github.com/settings/personal-access-tokens
+当前没有从一次真实正常请求捕获到新的本地 analysis，因此不能声称完整生产链路验收完成。
+未为了周末验收额外调用行情。隔离测试数据只保存在 selftest 目录，绝不进入实际 cache 或 GitHub。
+两次真实新鲜数据的 GitHub 自动更新、Token 实际写权限、普通 ChatGPT fallback 稳定性仍待验证。
+upstream_requests=0 表示该被动镜像代码路径没有行情请求，不是 Twelve Data 账户总调用量计量。
 
-token 只放在 Sakura 的环境/安全配置中，不能放进仓库、webroot、命令行参数、日志或聊天。
-服务账户私有目录权限700，配置文件600。run-sync.sh 从私有配置载入并 export
-FX_MIRROR_GITHUB_TOKEN，然后运行上述脚本。不要启用 shell set -x。
-本仓库不保存任何真实 token，也不传递 Twelve Data key 或 Sakura 密码。
-服务器 token 与本机用于开发提交的 GitHub 登录是两回事；本机凭据不会复制到服务器。
+## 安全与发布
 
-脚本发布前扫描凭据字段/常见 token 格式；发现后整包拒绝，不静默删掉行情字段。
---public-export-reviewed 表示部署者已审核源导出仅含公开市场数据。
-扫描不能识别任意未知密钥，新增源字段后必须重新审核；不要把调试请求信息混进行情。
+仅保存公开行情；发布前继续执行敏感字段扫描与所有 freshness 校验。
+GitHub 失败保留上一份；409/429/5xx 和网络异常最多三次尝试，401/403 不循环重试。
+同一份成功源结果由本地 source hash 去重，不再重复 GET/PUT GitHub。
+Token 不在命令、代码、公开文件或日志中。新鲜度不合格不重写时间，不补抓行情。
 
-## 重试与一致性
+运行状态：https://drexworld.sakura.ne.jp/fx-mirror-status.json
+安装证据：https://drexworld.sakura.ne.jp/fx-mirror-install.json
+公开 RAW：https://raw.githubusercontent.com/nnnnkatsu/fx-chatgpt-mirror/main/data/zarjpy.json
 
-- 目标仅 main:data/zarjpy.json，GET 当前 SHA，再 PUT。
-- 对409、429、500/502/503/504、网络异常最多3次，退避1/2秒；
-  Retry-After 在0–60秒范围内处理。每次重试重新GET SHA、重新校验新鲜度。
-- 401/403及其他非重试错误直接失败，避免权限错误循环请求。
-- 超时后重新GET；若相同/更新 fetched 已发布则跳过，避免重复提交。
-- 不用 force push；相同或更旧 fetched 跳过；源过期/错误/缺字段/泄密则保留上一份。
-- 日志不输出输入 JSON、请求头、token 或响应体。非零退出由服务器监控告警。
-- GitHub CDN 可能缓存；消费者必须检查源时间，不能靠 HTTP 成功判定新鲜。
+## 主动调度未启用
 
-## 验收
-
-1. 独立无登录 HTTP 客户端请求固定 RAW，确认200并能解析。
-2. 普通 ChatGPT 对话打开同一 RAW，确认能看到全部六周期，记录实际结果。
-3. 当前为单次快照，测试稍晚必然过期；可测试可读性，但不能把旧行情用于交易。
-4. 部署后观察至少两次真实源更新，确认 fetched 和蜡烛随源推进，价格/指标与原 JSON 一致。
-5. 停止投递>5分钟，读取方必须拒绝旧快照；恢复后再接受。
-6. 模拟GitHub失败、重复任务、源中含凭据：原API正常、旧快照保留、敏感信息不出日志。
-
-GitHub API 官方说明：
-https://docs.github.com/en/rest/repos/contents#create-or-update-file-contents
-
-## Verification evidence
-
-- Automatic run 1: 2026-09-26T00:56:01.495Z; freshness rejected.
-- Automatic run 2: 2026-09-26T01:00:01.399Z; freshness rejected, after switching to the local production command.
-- Anonymous RAW HTTP 200 confirmed. Published fetched_at_utc remains 2026-09-25T07:15:04.284Z; _mirror.mirrored_at_utc remains 2026-09-25T07:15:05.123Z.
-- These are two scheduler executions, NOT two successful uploads. No live-data acceptance claim is made.
+共享配额模块已离线测试，但没有接管现有 Worker 请求。
+检测前一次预采集、合并临时查询、跨币种配额账本仍需实际时间表、套餐额度、
+analysis 最大 credits 成本及全部上游入口接入验证后才能上线。详见 QUOTA_PLAN.md。

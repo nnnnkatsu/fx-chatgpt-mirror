@@ -2,21 +2,17 @@
 
 ## Current implementation vs deployment
 
-- cache_sync.py and the revised sakura_runner.py read ONLY the private local ZARJPY
-  analysis file. Missing/stale files never trigger a market-data request.
-- A successful publication is checkpointed by source hash. An unchanged fresh
-  source causes no GitHub request. Original source timestamps are never rewritten.
-- capture.php is a proposed sidecar to persist an already obtained ZARJPY response.
-  It has no HTTP calls. It must be integrated only after reviewing the live proxy.
-  It is NOT installed merely by pushing this repository.
-- quota_gate.py is an offline-tested shared admission component, NOT a deployed
-  system-wide limit. It must be placed before ALL upstream calls that share the
-  Twelve Data key, including direct Worker requests, prices and interval requests.
-  A Sakura-only gate cannot control callers bypassing Sakura.
-- The previously deployed server script is a pinned local copy. Updating this
-  repository does NOT replace that copy or stop the old polling cron.
-- Sakura login expired while pausing that cron; stopping it is not yet verified.
-  Until confirmed stopped/replaced, assume the old extra polling can continue.
+- Passive runner and capture sidecar were installed on 2026-09-26. The old extra
+  polling was stopped. See DEPLOYMENT.md for hashes, backup and server evidence.
+- Existing successful ZARJPY analysis responses are copied to a private file;
+  the two-minute cron reads only that file. It never requests market data.
+- No real fresh source capture or two successful automatic uploads have yet been
+  accepted. Isolated PHP tests do not substitute for production acceptance.
+- quota_gate.py remains an offline-tested component, NOT a deployed global limit.
+  It must cover all upstream callers sharing the Twelve Data key, including
+  direct Worker, price and interval routes. A Sakura-only gate is insufficient.
+- Scheduled prefetch and authenticated manual refresh remain disabled pending
+  timetable, plan allowance, cost and complete caller coverage.
 
 ## Intended timings
 
@@ -66,9 +62,9 @@ are NOT implemented by the admission library itself.
 
 ## Activation checklist
 
-1. Stop old polling cron, confirm saved state.
+1. DONE: old polling stopped; passive cron saved.
 2. Review live Sakura and Worker collection code without exposing secrets.
-3. Install passive runner and capture hook; compare original response behavior.
+3. INSTALLED: passive runner and capture hook; PHP checks pass and original bytes are preserved apart from the hook. Real-response acceptance pending.
 4. Verify missing/stale cache causes zero upstream HTTP calls.
 5. Confirm plan limits, measured cost and current usage, detection times/timezone.
 6. Connect existing acquisition paths to a SINGLE gate; deduplicate scheduled

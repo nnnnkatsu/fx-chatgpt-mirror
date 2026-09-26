@@ -1,9 +1,9 @@
-> 最新状态：已取消仓库脚本中的主动行情抓取，改为本地缓存 → GitHub。服务器旧版本不会随 git push 自动更新；因 Sakura 登录失效，停用旧 CRON 尚未确认。不要把代码完成等同于部署完成。
+> 被动镜像已部署（2026-09-26）：原额外轮询已停止；每两分钟只检查本地 JSON。现有 ZARJPY 响应增加保存副本旁路，API 路径与 launcher 不变。尚未验收两次真实自动上传。详见 DEPLOYMENT.md。
 
 # FX → GitHub → ChatGPT：ZARJPY 只读镜像
 
 只增加镜像，不改变 Twelve Data → Cloudflare → Sakura v3.1 的 API、launcher、PATH nonce 或其他货币。
-当前 data/zarjpy.json 仍是旧快照。仓库已改为只读本地缓存的被动镜像；服务器旧轮询尚未确认停用，新版本尚未部署。
+当前 data/zarjpy.json 仍是旧快照。服务器已安装只读本地缓存的被动镜像和现有响应保存旁路；等待真实正常请求产生本地结果。
 文件可随时间过期；上传成功、HTTP 200 或能看到价格不等于实时可用。
 
 ## 固定 RAW URL
@@ -78,5 +78,5 @@ python3 mirror.py /private/path/zarjpy-analysis.json --public-export-reviewed --
 
 ## 配额保护改造
 
-详见 [QUOTA_PLAN.md](QUOTA_PLAN.md)。cache_sync.py 只读私有缓存；capture.php 是待接入的原响应落盘旁路；quota_gate.py 提供共享配额准入。
+详见 [QUOTA_PLAN.md](QUOTA_PLAN.md)。cache_sync.py 只读私有缓存；capture.php 是已接入的原响应落盘旁路；quota_gate.py 提供共享配额准入。
 主动采集配置默认关闭：额度、analysis 实际成本、现有检测时间及所有上游入口的统一接入尚未核实。其他货币尚未启用镜像。
