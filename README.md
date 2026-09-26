@@ -1,9 +1,9 @@
-> Deployment update (2026-09-26 UTC): Sakura CRON is saved and runs every 2 minutes. The first full run reached source freshness validation at 00:56:01.495 UTC and rejected old candles. Two successful automated GitHub updates have NOT been verified. The repository snapshot is stale and must not be used as live trading data.
+> 最新状态：已取消仓库脚本中的主动行情抓取，改为本地缓存 → GitHub。服务器旧版本不会随 git push 自动更新；因 Sakura 登录失效，停用旧 CRON 尚未确认。不要把代码完成等同于部署完成。
 
 # FX → GitHub → ChatGPT：ZARJPY 只读镜像
 
 只增加镜像，不改变 Twelve Data → Cloudflare → Sakura v3.1 的 API、launcher、PATH nonce 或其他货币。
-当前 data/zarjpy.json 是从现有 Sakura fresh analysis 取得的真实单次快照，**未在 Sakura 部署自动同步**。
+当前 data/zarjpy.json 仍是旧快照。仓库已改为只读本地缓存的被动镜像；服务器旧轮询尚未确认停用，新版本尚未部署。
 文件可随时间过期；上传成功、HTTP 200 或能看到价格不等于实时可用。
 
 ## 固定 RAW URL
@@ -75,3 +75,8 @@ python3 mirror.py /private/path/zarjpy-analysis.json --public-export-reviewed --
 ```
 
 不要公开 private/、环境文件、服务器配置或任何密钥。
+
+## 配额保护改造
+
+详见 [QUOTA_PLAN.md](QUOTA_PLAN.md)。cache_sync.py 只读私有缓存；capture.php 是待接入的原响应落盘旁路；quota_gate.py 提供共享配额准入。
+主动采集配置默认关闭：额度、analysis 实际成本、现有检测时间及所有上游入口的统一接入尚未核实。其他货币尚未启用镜像。
