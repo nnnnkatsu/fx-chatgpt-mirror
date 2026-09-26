@@ -1,4 +1,4 @@
-﻿"""Install the pinned ZARJPY mirror outside the public web root."""
+"""Install the pinned PASSIVE mirror; never collect market data."""
 import os, sys, pathlib, hashlib, urllib.request, json, datetime, runpy, fcntl
 os.umask(0o077)
 p = pathlib.Path('/home/drexworld/fx-mirror')
@@ -11,15 +11,20 @@ try:
 except BlockingIOError:
     sys.exit(0)
 try:
-    for name, sha in [('mirror.py', '096b2a359d65cd433fd956c33e116eb7cec10f0ae40d9290f98d771f3d1e7302'), ('sakura_runner.py', '9d0dd1637de5319d9ec9c5d85fab26c63fa3e8d6a0156e402adbaf76929b9b39')]:
-        f = p / name
-        if not f.exists() or hashlib.sha256(f.read_bytes()).hexdigest() != sha:
-            data = urllib.request.urlopen('https://raw.githubusercontent.com/nnnnkatsu/fx-chatgpt-mirror/8ea291d99fc452911da1029a2d9c2c9296b0ba47/' + name, timeout=20).read(200000)
-            if hashlib.sha256(data).hexdigest() != sha:
-                raise ValueError('hash mismatch')
-            temp = p / (name + '.tmp')
-            temp.write_bytes(data)
-            os.replace(temp, f)
+    with open('sync.lock', 'a') as sync_lock:
+        try:
+            fcntl.flock(sync_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            sys.exit(0)
+        for name, sha in {'mirror.py': '096b2a359d65cd433fd956c33e116eb7cec10f0ae40d9290f98d771f3d1e7302', 'cache_sync.py': 'd16b92a928ba3515160437413b019c87caa1da36485f23121d7ad7e33ac6b187', 'capture.php': '668cf09b2dfebd41c6a27539efa9add53bd8278aa009623b725c733ca3db6da3', 'sakura_runner.py': '2ef8c8d5c9d6f104376191fc263335f0d9b5bf5eac6d3c9f54a1461c2e9965f8'}.items():
+            target = p / name
+            if not target.exists() or hashlib.sha256(target.read_bytes()).hexdigest() != sha:
+                data = urllib.request.urlopen('https://raw.githubusercontent.com/nnnnkatsu/fx-chatgpt-mirror/74205122129176f5d90ab6ff4bdae4bb9d94132e/' + name, timeout=20).read(200000)
+                if hashlib.sha256(data).hexdigest() != sha:
+                    raise ValueError('hash mismatch')
+                temp = p / (name + '.tmp')
+                temp.write_bytes(data)
+                os.replace(temp, target)
     sys.path.insert(0, str(p))
     runpy.run_path(str(p / 'sakura_runner.py'), run_name='__main__')
 except Exception as exc:
