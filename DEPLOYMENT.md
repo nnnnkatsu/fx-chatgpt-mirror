@@ -80,3 +80,10 @@ FX_MIRROR_GITHUB_TOKEN，然后运行上述脚本。不要启用 shell set -x。
 
 GitHub API 官方说明：
 https://docs.github.com/en/rest/repos/contents#create-or-update-file-contents
+
+## Verification evidence
+
+- Automatic run 1: 2026-09-26T00:56:01.495Z; freshness rejected.
+- Automatic run 2: 2026-09-26T01:00:01.399Z; freshness rejected, after switching to the local production command.
+- Anonymous RAW HTTP 200 confirmed. Published fetched_at_utc remains 2026-09-25T07:15:04.284Z; _mirror.mirrored_at_utc remains 2026-09-25T07:15:05.123Z.
+- These are two scheduler executions, NOT two successful uploads. No live-data acceptance claim is made.
