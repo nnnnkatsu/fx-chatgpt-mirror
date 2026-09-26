@@ -109,5 +109,6 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as exc:
-        write_status({"ok":False,"stage":"install","error_type":type(exc).__name__})
+        safe_reasons = {"PHP CLI unavailable", "unexpected capture version", "PHP lint failed", "unreviewed proxy", "unreviewed proxy tail", "unexpected patch", "backup mismatch", "isolated capture test failed", "proxy changed during install"}
+        write_status({"ok":False,"stage":"install","error_type":type(exc).__name__, "reason": str(exc) if str(exc) in safe_reasons else "other", "proxy_bytes": TARGET.stat().st_size if TARGET.exists() else None})
         raise SystemExit(1)
