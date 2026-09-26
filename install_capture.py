@@ -82,7 +82,7 @@ def main():
     testscript = ROOT / "capture-selftest.php"
     tests = r"""
 $input = json_encode(['ok'=>true,'type'=>'analysis','symbol'=>'ZAR/JPY',
-'source'=>'Twelve Data','fetched_at_utc'=>'2000-01-01T00:00:00Z','analysis'=>['test'=>true]]);
+'source'=>'Twelve Data','fetched_at_utc'=>'2000-01-01T00:00:00Z','analysis'=>['test'=>true]], JSON_UNESCAPED_SLASHES);
 if (!fx_mirror_capture_zarjpy($input)) { exit(11); }
 if (file_get_contents(TESTFILE) !== $input) { exit(12); }
 $other = str_replace('ZAR/JPY','USD/JPY',$input);
@@ -95,7 +95,7 @@ if (file_get_contents(TESTFILE) !== $input) { exit(15); }
     testscript.write_text(isolated+tests)
     check = subprocess.run([php,str(testscript)],stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=15)
     if check.returncode or check.stdout:
-        raise ValueError("isolated capture test failed")
+        raise ValueError("isolated capture test failed " + str(check.returncode))
     if TARGET.read_bytes() != original:
         raise ValueError("proxy changed during install")
     mode = TARGET.stat().st_mode & 0o777
@@ -109,6 +109,6 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as exc:
-        safe_reasons = {"PHP CLI unavailable", "unexpected capture version", "PHP lint failed", "unreviewed proxy", "unreviewed proxy tail", "unexpected patch", "backup mismatch", "isolated capture test failed", "proxy changed during install"}
+        safe_reasons = {"PHP CLI unavailable", "unexpected capture version", "PHP lint failed", "unreviewed proxy", "unreviewed proxy tail", "unexpected patch", "backup mismatch", "isolated capture test failed 11", "isolated capture test failed 12", "isolated capture test failed 13", "isolated capture test failed 14", "isolated capture test failed 15", "isolated capture test failed 255", "proxy changed during install"}
         write_status({"ok":False,"stage":"install","error_type":type(exc).__name__, "reason": str(exc) if str(exc) in safe_reasons else "other", "proxy_bytes": TARGET.stat().st_size if TARGET.exists() else None})
         raise SystemExit(1)
