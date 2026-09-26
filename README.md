@@ -1,3 +1,5 @@
+> Deployment update (2026-09-26 UTC): Sakura CRON is saved and runs every 2 minutes. The first full run reached source freshness validation at 00:56:01.495 UTC and rejected old candles. Two successful automated GitHub updates have NOT been verified. The repository snapshot is stale and must not be used as live trading data.
+
 # FX → GitHub → ChatGPT：ZARJPY 只读镜像
 
 只增加镜像，不改变 Twelve Data → Cloudflare → Sakura v3.1 的 API、launcher、PATH nonce 或其他货币。

@@ -1,9 +1,26 @@
 # Sakura → GitHub 最小接入
 
-## 交付范围
+## Deployment status: 2026-09-26 UTC
 
-同步脚本和真实单次快照已经准备。尚无 Sakura 服务器管理连接，**没有部署 cron、没有改现有代码**。
-先让用户回普通 ChatGPT 测试 RAW，成功后再部署持续同步；不扩展 USDJPY/MXNJPY/GBPUSD。
+Independent scripts: `/home/drexworld/fx-mirror/` (directory mode 700). Server runtime: Python 3.8.12 standard library. Original Sakura API, index.php, launcher and PATH nonce are unchanged. ZARJPY only.
+
+CRON: every 2 minutes, all days. Saved production command:
+
+```sh
+/usr/bin/env PATH=/usr/local/bin:/usr/bin:/bin python3 /home/drexworld/fx-mirror/sakura_runner.py >/dev/null 2>&1
+```
+
+Token stays in Sakura CRON environment variable `FX_MIRROR_GITHUB_TOKEN`. The original proxy has no local analysis cache, so the independent runner requests the existing Sakura ZARJPY analysis endpoint using a fresh PATH nonce. It does not change the existing request handler.
+
+Installed mirror.py and sakura_runner.py are pinned to commit `8ea291d99fc452911da1029a2d9c2c9296b0ba47`. Bootstrap installer commit: `69a8eff1df2882879278c2d143243b209cfb54cd`; downloads were SHA-256 checked. After installation, CRON was shortened to run local files directly.
+
+Public sanitized health status: https://drexworld.sakura.ne.jp/fx-mirror-status.json
+
+Observed automatic run: 2026-09-26T00:56:01.495Z, stage=freshness, ValueError. Independent source check: fetched_at_utc=2026-09-26T00:57:30.455Z, but 1min latest_candle_at_utc=2026-09-25T23:59:00Z and candle_age_seconds=3510. A new fetch does not make old candles fresh.
+
+Acceptance remains pending: two successful automated GitHub updates must show advancing fetched_at_utc and _mirror.mirrored_at_utc. Existing public JSON remains an old snapshot, unsuitable for live analysis. Cron continues automatically and attempts publication only after all freshness checks pass. Server token write permissions have not yet been proven by a successful publication.
+
+The following sections are design/operations reference, not additional changes to the original API.
 
 ## 推荐：在现有 analysis 成功生成后旁路投递
 
