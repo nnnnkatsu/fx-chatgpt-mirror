@@ -1,9 +1,9 @@
-> 被动镜像已部署（2026-09-26）：原额外轮询已停止；每两分钟只检查本地 JSON。现有 ZARJPY 响应增加保存副本旁路，API 路径与 launcher 不变。尚未验收两次真实自动上传。详见 DEPLOYMENT.md。
+> 2026-09-28：ZARJPY 两次真实自动上传验收通过。镜像只读本地结果；每分钟8、每日800额度已记录，主动采集调度仍关闭。GitHub连接器读取成功；普通网页读取本次失败。详情见 [验收记录](ACCEPTANCE-2026-09-28.md)。
 
 # FX → GitHub → ChatGPT：ZARJPY 只读镜像
 
 只增加镜像，不改变 Twelve Data → Cloudflare → Sakura v3.1 的 API、launcher、PATH nonce 或其他货币。
-当前 data/zarjpy.json 仍是旧快照。服务器已安装只读本地缓存的被动镜像和现有响应保存旁路；等待真实正常请求产生本地结果。
+data/zarjpy.json 已通过两次真实请求与服务器自动上传验收。它只在现有成功请求产生新结果时更新，每次读取仍必须检查新鲜度。
 文件可随时间过期；上传成功、HTTP 200 或能看到价格不等于实时可用。
 
 ## 固定 RAW URL
