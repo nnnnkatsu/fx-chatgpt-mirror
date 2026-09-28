@@ -46,12 +46,14 @@ def no_secrets(value):
 def finite_number(value):
     return type(value) in (float, int) and math.isfinite(value)
 
-def validate(data, now=None):
+PAIRS = {"ZARJPY": "ZAR/JPY", "USDJPY": "USD/JPY", "MXNJPY": "MXN/JPY"}
+
+def validate(data, now=None, pair="ZARJPY"):
     now = now or datetime.now(timezone.utc)
     no_secrets(data)
     if data.get("ok") is not True or data.get("type") != "analysis":
         raise ValueError("not a successful analysis response")
-    if data.get("symbol") != "ZAR/JPY" or data.get("pair", "ZARJPY") != "ZARJPY":
+    if pair not in PAIRS or data.get("symbol") != PAIRS[pair] or data.get("pair", pair) != pair:
         raise ValueError("wrong pair")
     if data.get("source") != "Twelve Data":
         raise ValueError("unexpected upstream source")
@@ -84,13 +86,13 @@ def validate(data, now=None):
             raise ValueError("missing candle history or indicators")
     return data
 
-def build(data, now=None):
+def build(data, now=None, pair="ZARJPY"):
     now = now or datetime.now(timezone.utc)
-    validate(data, now)
+    validate(data, now, pair)
     if "_mirror" in data:
         raise ValueError("input must be the original Sakura response")
     result = copy.deepcopy(data)
-    result.setdefault("pair", "ZARJPY")
+    result.setdefault("pair", pair)
     result.setdefault("generated_at_utc", None)
     canonical = json.dumps(data, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
     result["_mirror"] = {
@@ -102,26 +104,29 @@ def build(data, now=None):
     }
     return result
 
-def api(method, token, body=None):
+def api(method, token, body=None, pair="ZARJPY"):
+    if pair not in PAIRS:
+        raise ValueError("unsupported pair")
+    endpoint = API.replace("zarjpy.json", pair.lower() + ".json")
     data = None if body is None else json.dumps(body).encode()
-    request = Request(API + ("?ref=main" if method == "GET" else ""), data=data, method=method,
+    request = Request(endpoint + ("?ref=main" if method == "GET" else ""), data=data, method=method,
         headers={"Authorization": "Bearer " + token, "Accept": "application/vnd.github+json",
                  "Content-Type": "application/json", "User-Agent": "sakura-zarjpy-mirror",
                  "X-GitHub-Api-Version": "2026-03-10"})
     with urlopen(request, timeout=20) as response:
         return json.load(response)
 
-def publish(payload, token):
+def publish(payload, token, pair="ZARJPY"):
     for attempt in range(3):
         try:
-            validate(payload)
+            validate(payload, pair=pair)
             try:
-                current = api("GET", token)
+                current = api("GET", token, pair=pair)
             except HTTPError as exc:
                 if exc.code != 404:
                     raise
                 current = None
-            body = {"message": "Update ZARJPY analysis snapshot", "branch": "main"}
+            body = {"message": "Update " + pair + " analysis snapshot", "branch": "main"}
             if current:
                 old = json.loads(base64.b64decode(current["content"]))
                 if old.get("fetched_at_utc") and utc(old["fetched_at_utc"]) >= utc(payload["fetched_at_utc"]):
@@ -129,8 +134,8 @@ def publish(payload, token):
                     return
                 body["sha"] = current["sha"]
             body["content"] = base64.b64encode((json.dumps(payload, ensure_ascii=False, indent=2, allow_nan=False) + "\n").encode()).decode()
-            api("PUT", token, body)
-            print("Published data/zarjpy.json")
+            api("PUT", token, body, pair=pair)
+            print("Published data/" + pair.lower() + ".json")
             return
         except HTTPError as exc:
             retryable = exc.code in (409, 429, 500, 502, 503, 504)

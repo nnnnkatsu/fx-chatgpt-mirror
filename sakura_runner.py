@@ -27,17 +27,20 @@ def run():
         except BlockingIOError:
             return 0
         signal.signal(signal.SIGALRM, timeout_handler)
-        signal.alarm(90)
-        try:
-            status = sync_once(ROOT, os.environ.get("FX_MIRROR_GITHUB_TOKEN"))
-            write_status(status)
-            return 0 if status["ok"] or status["stage"] == "awaiting_local_source" else 1
-        except Exception as exc:
-            write_status({"ok": False, "stage": "local_cache_or_publish",
-                          "upstream_requests": 0, "error_type": type(exc).__name__})
-            return 1
-        finally:
-            signal.alarm(0)
+        results = {}
+        for pair in mirror.PAIRS:
+            signal.alarm(90)
+            try:
+                results[pair] = sync_once(ROOT, os.environ.get("FX_MIRROR_GITHUB_TOKEN"), pair=pair)
+            except Exception as exc:
+                results[pair] = {"ok": False, "stage": "local_cache_or_publish",
+                                 "upstream_requests": 0, "error_type": type(exc).__name__}
+            finally:
+                signal.alarm(0)
+        status = dict(results["ZARJPY"])
+        status["pairs"] = results
+        write_status(status)
+        return 0
 
 if __name__ == "__main__":
     raise SystemExit(run())

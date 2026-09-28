@@ -6,8 +6,8 @@
   polling was stopped. See DEPLOYMENT.md for hashes, backup and server evidence.
 - Existing successful ZARJPY analysis responses are copied to a private file;
   the two-minute cron reads only that file. It never requests market data.
-- No real fresh source capture or two successful automatic uploads have yet been
-  accepted. Isolated PHP tests do not substitute for production acceptance.
+- ZARJPY real capture and two automatic uploads passed on 2026-09-28; see
+  ACCEPTANCE-2026-09-28.md. USD/MXN expansion is authorized; acceptance is separate.
 - quota_gate.py remains an offline-tested component, NOT a deployed global limit.
   It must cover all upstream callers sharing the Twelve Data key, including
   direct Worker, price and interval routes. A Sakura-only gate is insufficient.
@@ -72,3 +72,13 @@ are NOT implemented by the admission library itself.
 7. Test ZARJPY first; keep other currency interfaces and schedules unchanged.
 8. Verify two real fresh publications during an open market before declaring
    mirror acceptance or extending the prototype.
+
+## Confirmed daytime timetable (Asia/Tokyo)
+
+Weekdays only: USDJPY at 08:05 through 23:05 hourly; ZARJPY at
+08:40, 12:40, 16:40, 20:40; MXNJPY at 08:00, 12:00, 16:00, 20:00.
+24 analysis checks/day. No midnight/04:00 checks, and no Monday exception.
+These are analysis task times, not an enabled acquisition cron.
+The account allowance is 800 credits/day and 8/minute shared across callers.
+Per-analysis cost is still unknown. Do not equate 24 checks to 24 credits.
+Additional manual and retry budget must remain available before active prefetch.
