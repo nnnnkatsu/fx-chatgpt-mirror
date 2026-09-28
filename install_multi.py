@@ -65,5 +65,5 @@ foreach (['zarjpy'=>'ZAR/JPY','usdjpy'=>'USD/JPY','mxnjpy'=>'MXN/JPY'] as $p=>$s
 if __name__=='__main__':
     try: main()
     except Exception as exc:
-        status({'ok':False,'stage':'multi_pair_install','error_type':type(exc).__name__,'upstream_requests':0})
+        status({'ok':False,'stage':'multi_pair_install','error_type':type(exc).__name__,'reason':str(exc) if str(exc) in ('unreviewed proxy','release hash','PHP unavailable','PHP lint','capture selftest','proxy changed') else 'other','upstream_requests':0})
         sys.exit(1)
