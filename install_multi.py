@@ -38,7 +38,7 @@ def main():
         source=(staged/'capture.php').read_text().replace('/home/drexworld/fx-mirror/cache',str(testroot))
         test=r"""
 foreach (['zarjpy'=>'ZAR/JPY','usdjpy'=>'USD/JPY','mxnjpy'=>'MXN/JPY'] as $p=>$symbol) {
- $body=json_encode(['ok'=>true,'type'=>'analysis','symbol'=>$symbol,'source'=>'Twelve Data','fetched_at_utc'=>'2000-01-01T00:00:00Z','analysis'=>['test'=>true]]);
+ $body=json_encode(['ok'=>true,'type'=>'analysis','symbol'=>$symbol,'source'=>'Twelve Data','fetched_at_utc'=>'2000-01-01T00:00:00Z','analysis'=>['test'=>true]], JSON_UNESCAPED_SLASHES);
  if (!fx_mirror_capture($body,$p)) exit(11);
  if (file_get_contents(TESTROOT.'/'.$p.'-analysis.json') !== $body) exit(12);
  if (fx_mirror_capture(str_replace($symbol,'GBP/USD',$body),$p)) exit(13);
