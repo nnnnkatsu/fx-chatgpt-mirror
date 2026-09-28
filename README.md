@@ -1,3 +1,8 @@
+> Diagnostics update (deployment pending): observed_sync.py records private rotating
+> JSONL logs and distinguishes awaiting_fresh_source from GitHub publication errors.
+> A running 120-second cron does not imply a new market snapshot exists. No source
+> refresh is added by this change. See MIRROR-DIAGNOSTICS.md.
+
 > USDJPY/MXNJPY passive-cache support added on 2026-09-28. Active prefetch remains disabled pending upstream credit accounting. See DEPLOYMENT.md for installation/acceptance.
 
 > 2026-09-28：ZARJPY 两次真实自动上传验收通过。镜像只读本地结果；每分钟8、每日800额度已记录，主动采集调度仍关闭。GitHub连接器读取成功；普通网页读取本次失败。详情见 [验收记录](ACCEPTANCE-2026-09-28.md)。

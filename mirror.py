@@ -104,7 +104,7 @@ def build(data, now=None, pair="ZARJPY"):
     }
     return result
 
-def api(method, token, body=None, pair="ZARJPY"):
+def api(method, token, body=None, pair="ZARJPY", audit=None):
     if pair not in PAIRS:
         raise ValueError("unsupported pair")
     endpoint = API.replace("zarjpy.json", pair.lower() + ".json")
@@ -113,15 +113,26 @@ def api(method, token, body=None, pair="ZARJPY"):
         headers={"Authorization": "Bearer " + token, "Accept": "application/vnd.github+json",
                  "Content-Type": "application/json", "User-Agent": "sakura-zarjpy-mirror",
                  "X-GitHub-Api-Version": "2026-03-10"})
-    with urlopen(request, timeout=20) as response:
-        return json.load(response)
+    try:
+        with urlopen(request, timeout=20) as response:
+            result = json.load(response)
+            if audit:
+                audit({"event": "github_http", "method": method, "http_code": response.status,
+                       "remote_blob_sha": result.get("sha"),
+                       "commit_sha": result.get("commit", {}).get("sha")})
+            return result
+    except HTTPError as exc:
+        if audit:
+            audit({"event": "github_http", "method": method, "http_code": exc.code})
+        raise
 
-def publish(payload, token, pair="ZARJPY"):
+def publish(payload, token, pair="ZARJPY", audit=None):
+    options = {"audit": audit} if audit else {}
     for attempt in range(3):
         try:
             validate(payload, pair=pair)
             try:
-                current = api("GET", token, pair=pair)
+                current = api("GET", token, pair=pair, **options)
             except HTTPError as exc:
                 if exc.code != 404:
                     raise
@@ -134,7 +145,7 @@ def publish(payload, token, pair="ZARJPY"):
                     return
                 body["sha"] = current["sha"]
             body["content"] = base64.b64encode((json.dumps(payload, ensure_ascii=False, indent=2, allow_nan=False) + "\n").encode()).decode()
-            api("PUT", token, body, pair=pair)
+            api("PUT", token, body, pair=pair, **options)
             print("Published data/" + pair.lower() + ".json")
             return
         except HTTPError as exc:

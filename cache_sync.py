@@ -15,7 +15,8 @@ def atomic_json(path, value, mode=0o600):
     os.chmod(tmp, mode)
     os.replace(tmp, path)
 
-def sync_once(root, token, now=None, pair="ZARJPY"):
+def sync_once(root, token, now=None, pair="ZARJPY", audit=None):
+    options = {"audit": audit} if audit else {}
     if pair not in mirror.PAIRS:
         raise ValueError("unsupported pair")
     root = Path(root)
@@ -37,8 +38,8 @@ def sync_once(root, token, now=None, pair="ZARJPY"):
     if not token:
         raise ValueError("missing GitHub token")
     payload["_mirror"].update(mode="sakura-local-cache", schedule_seconds=120)
-    mirror.publish(payload, token, pair=pair)
-    remote = mirror.api("GET", token, pair=pair)
+    mirror.publish(payload, token, pair=pair, **options)
+    remote = mirror.api("GET", token, pair=pair, **options)
     actual = json.loads(base64.b64decode(remote["content"]))
     mirror.validate(actual, pair=pair)
     if mirror.utc(actual["fetched_at_utc"]) < mirror.utc(payload["fetched_at_utc"]):

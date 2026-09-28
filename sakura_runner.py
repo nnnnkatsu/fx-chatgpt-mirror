@@ -4,7 +4,8 @@ from pathlib import Path
 import os
 from datetime import datetime, timezone
 import mirror
-from cache_sync import atomic_json, sync_once
+from cache_sync import atomic_json
+from observed_sync import observed_sync
 
 ROOT = Path("/home/drexworld/fx-mirror")
 STATUS = Path("/home/drexworld/www/fx-mirror-status.json")
@@ -31,13 +32,14 @@ def run():
         for pair in mirror.PAIRS:
             signal.alarm(90)
             try:
-                results[pair] = sync_once(ROOT, os.environ.get("FX_MIRROR_GITHUB_TOKEN"), pair=pair)
+                results[pair] = observed_sync(ROOT, os.environ.get("FX_MIRROR_GITHUB_TOKEN"), pair)
             except Exception as exc:
                 results[pair] = {"ok": False, "stage": "local_cache_or_publish",
                                  "upstream_requests": 0, "error_type": type(exc).__name__}
             finally:
                 signal.alarm(0)
-        status = dict(results["ZARJPY"])
+        status = {"ok": all(v.get("ok") for v in results.values()),
+                  "stage": "passive_cache_check", "upstream_requests": 0, "schedule_seconds": 120}
         status["pairs"] = results
         write_status(status)
         return 0
