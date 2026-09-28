@@ -39,10 +39,10 @@ Worker's six-timeframe collection, cache behavior and retry fan-out first.
 analysis_cost_upper_bound must cover the maximum possible credits for one
 admitted operation; every separate retry needs a separate reservation.
 
-The example policy deliberately has null budgets, empty timetable, enabled=false
-and all_upstream_callers_gated=false. It refuses active collection. Only ZARJPY is
-eligible for the prototype; other pair names exist for shared-budget tests, not
-production enablement.
+The example policy records the 8/minute and 800/day limits, but retains unknown
+cost/reserve values, enabled=false and all_upstream_callers_gated=false. It refuses
+active collection. Passive capture supports ZARJPY, USDJPY and MXNJPY; GBPUSD is
+not enabled. Passive mirroring does not establish a global upstream quota gate.
 
 The gate stores attempts in one PRIVATE SQLite database, serializes reservations,
 and charges uncertain/failed requests conservatively without refunds. It checks:
@@ -64,7 +64,7 @@ are NOT implemented by the admission library itself.
 
 1. DONE: old polling stopped; passive cron saved.
 2. Review live Sakura and Worker collection code without exposing secrets.
-3. INSTALLED: passive runner and capture hook; PHP checks pass and original bytes are preserved apart from the hook. Real-response acceptance pending.
+3. INSTALLED: passive runner and capture hook; PHP checks pass and original bytes are preserved apart from the hook. ZARJPY real-response acceptance passed; USD/MXN acceptance pending.
 4. Verify missing/stale cache causes zero upstream HTTP calls.
 5. Confirm plan limits, measured cost and current usage, detection times/timezone.
 6. Connect existing acquisition paths to a SINGLE gate; deduplicate scheduled

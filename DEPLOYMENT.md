@@ -1,3 +1,5 @@
+> 2026-09-28: USDJPY and MXNJPY passive mirrors deployed and live-tested. See [multi-pair acceptance](ACCEPTANCE-MULTI-2026-09-28.md). No active prefetch or global quota gate is enabled.
+
 > 最新验收（2026-09-28）：两次真实源请求均由服务器自动上传，源字段逐项保真、Token写权限及GitHub连接器读取通过。下方2026-09-26记录为部署历史；其待验收项以 [ACCEPTANCE-2026-09-28.md](ACCEPTANCE-2026-09-28.md) 为准。普通web reader仍未通过稳定读取验证。
 
 # Sakura ZARJPY 被动镜像部署
