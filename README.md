@@ -1,3 +1,5 @@
+> USDJPY/MXNJPY passive-cache support added on 2026-09-28. Active prefetch remains disabled pending upstream credit accounting. See DEPLOYMENT.md for installation/acceptance.
+
 > 2026-09-28：ZARJPY 两次真实自动上传验收通过。镜像只读本地结果；每分钟8、每日800额度已记录，主动采集调度仍关闭。GitHub连接器读取成功；普通网页读取本次失败。详情见 [验收记录](ACCEPTANCE-2026-09-28.md)。
 
 # FX → GitHub → ChatGPT：ZARJPY 只读镜像
