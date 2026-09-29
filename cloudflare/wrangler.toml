@@ -1,0 +1,19 @@
+﻿name = "throbbing-dawn-de54"
+main = "worker.js"
+compatibility_date = "2026-09-29"
+keep_vars = true
+
+[exports.FxCoordinator]
+type = "durable-object"
+storage = "sqlite"
+
+[[durable_objects.bindings]]
+name = "FX_COORDINATOR"
+class_name = "FxCoordinator"
+
+[vars]
+FX_SCHEDULE_ENABLED = "false"
+FX_BOOTSTRAP_USED_CREDITS = "800"
+
+[triggers]
+crons = ["2 * * * *", "57 2,6,10,22 * * *", "37 3,7,11,23 * * *"]
