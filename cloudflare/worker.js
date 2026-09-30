@@ -50,10 +50,11 @@ export class FxCoordinator extends DurableObject {
 
 export function scheduledPairs(ms) {
   const j=new Date(ms+9*3600000), day=j.getUTCDay(), h=j.getUTCHours(), m=j.getUTCMinutes();
-  if(day===0||day===6) return [];
-  if(m===2 && h>=8 && h<=23) return ["usdjpy"];
-  if(m===57 && [7,11,15,19].includes(h)) return ["mxnjpy"];
-  if(m===37 && [8,12,16,20].includes(h)) return ["zarjpy"];
+  const weekday=day>=1 && day<=5;
+  const previousWeekday=day>=2 && day<=6;
+  if(weekday && m===2 && h>=8 && h<=23) return ["usdjpy"];
+  if(m===12 && ((weekday && [8,12,16,20].includes(h)) || (h===0 && previousWeekday))) return ["mxnjpy"];
+  if(m===37 && ((weekday && [8,12,16,20].includes(h)) || (h===0 && previousWeekday))) return ["zarjpy"];
   return [];
 }
 
