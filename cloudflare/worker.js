@@ -52,9 +52,9 @@ export function scheduledPairs(ms) {
   const j=new Date(ms+9*3600000), day=j.getUTCDay(), h=j.getUTCHours(), m=j.getUTCMinutes();
   const weekday=day>=1 && day<=5;
   const previousWeekday=day>=2 && day<=6;
-  if(weekday && m===2 && h>=8 && h<=23) return ["usdjpy"];
-  if(m===12 && ((weekday && [8,12,16,20].includes(h)) || (h===0 && previousWeekday))) return ["mxnjpy"];
-  if(m===37 && ((weekday && [8,12,16,20].includes(h)) || (h===0 && previousWeekday))) return ["zarjpy"];
+  if(weekday && m===4 && h>=8 && h<=23) return ["usdjpy"];
+  if(m===14 && ((weekday && [8,12,16,20].includes(h)) || (h===0 && previousWeekday))) return ["mxnjpy"];
+  if(m===39 && ((weekday && [8,12,16,20].includes(h)) || (h===0 && previousWeekday))) return ["zarjpy"];
   return [];
 }
 

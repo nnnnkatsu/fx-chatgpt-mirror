@@ -1,3 +1,5 @@
+> Current Sakura delivery: changed cache triggers a finite background mirror; the existing 2-minute cron remains fallback. See [event sync](EVENT-SYNC.md) and [current JST schedule](cloudflare/SCHEDULE-2026-09-30.md).
+
 > Diagnostics update (deployment pending): observed_sync.py records private rotating
 > JSONL logs and distinguishes awaiting_fresh_source from GitHub publication errors.
 > A running 120-second cron does not imply a new market snapshot exists. No source
