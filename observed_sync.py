@@ -18,10 +18,10 @@ def append_log(root, event):
         stream.write(json.dumps(event, allow_nan=False) + "\n")
 
 
-def observed_sync(root, token, pair, now=None):
+def observed_sync(root, token, pair, now=None, trigger="cron_fallback"):
     root = Path(root)
     now = now or datetime.now(timezone.utc)
-    state = {"pair": pair, "started_at_utc": mirror.stamp(now), "upstream_requests": 0,
+    state = {"trigger": trigger, "pair": pair, "started_at_utc": mirror.stamp(now), "upstream_requests": 0,
              "github_requests": 0, "update_attempted": False, "commit_sha": None}
     events = []
     def audit(event):

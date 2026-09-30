@@ -37,7 +37,7 @@ def sync_once(root, token, now=None, pair="ZARJPY", audit=None):
         return dict(previous["status"], stage="unchanged", upstream_requests=0)
     if not token:
         raise ValueError("missing GitHub token")
-    payload["_mirror"].update(mode="sakura-local-cache", schedule_seconds=120)
+    payload["_mirror"].update(mode="sakura-local-cache", schedule_seconds=120, delivery="cache-event-with-cron-fallback")
     mirror.publish(payload, token, pair=pair, **options)
     remote = mirror.api("GET", token, pair=pair, **options)
     actual = json.loads(base64.b64decode(remote["content"]))
