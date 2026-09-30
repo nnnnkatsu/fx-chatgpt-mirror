@@ -1,0 +1,17 @@
+﻿import fs from 'node:fs';
+import assert from 'node:assert/strict';
+const code=fs.readFileSync(new URL('./worker.js',import.meta.url),'utf8').replace('import { DurableObject } from "cloudflare:workers";','class DurableObject { constructor() {} }');
+const {candleTimestamp,FxCoordinator}=await import('data:text/javascript;base64,'+Buffer.from(code).toString('base64'));
+assert.equal(candleTimestamp('2026-09-30','1day','Australia/Sydney'),'2026-09-29T14:00:00.000Z');
+assert.equal(candleTimestamp('2026-10-05','1day','Australia/Sydney'),'2026-10-04T13:00:00.000Z');
+assert.equal(candleTimestamp('2026-04-06','1day','Australia/Sydney'),'2026-04-05T14:00:00.000Z');
+assert.equal(candleTimestamp('2026-09-30','1day','UTC'),'2026-09-30T00:00:00.000Z');
+assert.equal(candleTimestamp('2026-09-29 23:35:00','1min'),'2026-09-29T23:35:00Z');
+assert.throws(()=>candleTimestamp('2026-09-30','1day','Invalid/Zone'));
+let count=0;
+globalThis.fetch=async url=>{count++;let u=new URL(url);return Response.json(u.pathname==='/price'?{price:'9.6'}:{meta:{exchange_timezone:'Australia/Sydney'},values:Array.from({length:160},()=>({datetime:u.searchParams.get('interval')==='1day'?'2026-09-30':'2026-09-29 23:35:00',open:'9.5',high:'9.7',low:'9.4',close:'9.6'}))});};
+const RealDate=Date;globalThis.Date=class extends RealDate{constructor(...a){super(...(a.length?a:['2026-09-29T23:37:51.883Z']));}static now(){return RealDate.parse('2026-09-29T23:37:51.883Z');}};
+const map=new Map();const c=new FxCoordinator({storage:{get:async k=>structuredClone(map.get(k)),put:async(k,v)=>map.set(k,structuredClone(v))}},{TWELVE_DATA_API_KEY:'test-only',FX_BOOTSTRAP_USED_CREDITS:'0'});
+const r=await c.run('/zarjpy/analysis');assert.equal(r.status,200);assert.equal(count,7);const d=JSON.parse(r.body);const day=d.analysis['1day'];assert.equal(day.current_candle.datetime,'2026-09-30');assert.equal(day.latest_candle_at_utc,'2026-09-29T14:00:00.000Z');assert.equal(day.candle_age_seconds,34671);assert.equal(day.current_candle.source_timezone,'Australia/Sydney');
+fs.writeFileSync(new URL('../private/daily-regression.json',import.meta.url),r.body);
+console.log('PASS daily timezone, DST start/end, metadata timezone, intraday unchanged, full analysis 7 calls, source date preserved');

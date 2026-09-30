@@ -337,6 +337,24 @@ async function fetchPrice(symbol, env) {
 }
 
 
+// Daily date labels use the exchange timezone even when timezone=UTC is requested.
+// Preserve the source date; normalize its local midnight as a date reference, not a tick time.
+export function candleTimestamp(datetime, interval, exchangeTimezone) {
+  if (interval !== "1day") return datetime.replace(" ", "T") + "Z";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(datetime)) throw new Error("Invalid daily date");
+  const zone = exchangeTimezone || "Australia/Sydney"; // documented Forex default
+  const target = Date.parse(datetime + "T00:00:00Z");
+  const fmt = new Intl.DateTimeFormat("en-GB", {timeZone:zone,year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hourCycle:"h23"});
+  let instant=target;
+  for(let i=0;i<3;i++) {
+    const v=Object.fromEntries(fmt.formatToParts(new Date(instant)).map(p=>[p.type,p.value]));
+    const local=Date.UTC(Number(v.year),Number(v.month)-1,Number(v.day),Number(v.hour),Number(v.minute),Number(v.second));
+    instant += target-local;
+  }
+  if (!Number.isFinite(instant)) throw new Error("Invalid daily timezone");
+  return new Date(instant).toISOString();
+}
+
 async function fetchCandles(
   symbol,
   interval,
@@ -369,14 +387,15 @@ async function fetchCandles(
 return data.values
   .map(c => ({
     datetime: c.datetime,
-    datetime_utc: c.datetime.replace(" ", "T") + "Z",
+    datetime_utc: candleTimestamp(c.datetime, interval, data.meta?.exchange_timezone),
+    ...(interval === "1day" ? {source_timezone: data.meta?.exchange_timezone || "Australia/Sydney", timestamp_basis:"exchange_date_midnight", source_date:c.datetime} : {}),
     open: Number(c.open),
     high: Number(c.high),
     low: Number(c.low),
     close: Number(c.close)
   }))
   .filter(c => {
-    const date = new Date(c.datetime.replace(" ", "T") + "Z");
+    const date = new Date(interval === "1day" ? c.datetime + "T00:00:00Z" : c.datetime_utc);
     const day = date.getUTCDay();
 
     // 过滤周六、周日
@@ -414,7 +433,7 @@ function buildAnalysis(candles) {
   const previousClosedCandle = candles[candles.length - 2];
 
   const latestCandleTime = new Date(
-    currentCandle.datetime.replace(" ", "T") + "Z"
+    currentCandle.datetime_utc
   );
 
   const candleAgeSeconds = Math.max(
@@ -428,7 +447,7 @@ function buildAnalysis(candles) {
     timezone: "UTC",
 
     latest_candle_at_utc:
-      currentCandle.datetime.replace(" ", "T") + "Z",
+      currentCandle.datetime_utc,
 
     candle_age_seconds: candleAgeSeconds,
 
