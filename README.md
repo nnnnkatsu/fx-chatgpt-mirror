@@ -1,91 +1,49 @@
-> Current Sakura delivery: changed cache triggers a finite background mirror; the existing 2-minute cron remains fallback. See [event sync](EVENT-SYNC.md) and [current JST schedule](cloudflare/SCHEDULE-2026-09-30.md).
+# FX → Sakura → GitHub 只读行情镜像
 
-> Diagnostics update (deployment pending): observed_sync.py records private rotating
-> JSONL logs and distinguishes awaiting_fresh_source from GitHub publication errors.
-> A running 120-second cron does not imply a new market snapshot exists. No source
-> refresh is added by this change. See MIRROR-DIAGNOSTICS.md.
+当前支持 USDJPY、ZARJPY、MXNJPY。保留现有 Twelve Data → Cloudflare Worker → Sakura v3.1 API、launcher和PATH nonce；GitHub只是已有行情的只读镜像。
 
-> USDJPY/MXNJPY passive-cache support added on 2026-09-28. Active prefetch remains disabled pending upstream credit accounting. See DEPLOYMENT.md for installation/acceptance.
+## 当前使用方式（2026-10-01）
 
-> 2026-09-28：ZARJPY 两次真实自动上传验收通过。镜像只读本地结果；每分钟8、每日800额度已记录，主动采集调度仍关闭。GitHub连接器读取成功；普通网页读取本次失败。详情见 [验收记录](ACCEPTANCE-2026-09-28.md)。
+- **临时查询新行情：[浏览器手动触发正式流程](MANUAL-REFRESH.md)**。打开新的launcher，点击对应fresh analysis一次，再让ChatGPT读取镜像。没有新增刷新接口。
+- **定时检查：[当前JST时表](cloudflare/SCHEDULE-2026-09-30.md)**。Worker按既定时点预取，仍共用800 credits/日和8 credits/分钟额度控制；不为镜像新增采集。
+- **同步：[新缓存立即发布，120秒Cron补偿](EVENT-SYNC.md)**。源未改变不重复提交。GitHub读取不触发刷新。
+- **诊断：**Sakura保存私有运行日志；ChatGPT任务结果末尾保存读取端JSON诊断。当前GitHub连接器写入测试返回403，不假定任务能自动把日志写入本仓库。
 
-# FX → GitHub → ChatGPT：ZARJPY 只读镜像
+## 正式行情文件
 
-只增加镜像，不改变 Twelve Data → Cloudflare → Sakura v3.1 的 API、launcher、PATH nonce 或其他货币。
-data/zarjpy.json 已通过两次真实请求与服务器自动上传验收。它只在现有成功请求产生新结果时更新，每次读取仍必须检查新鲜度。
-文件可随时间过期；上传成功、HTTP 200 或能看到价格不等于实时可用。
+| 货币 | 文件 |
+| --- | --- |
+| USDJPY | [data/usdjpy.json](https://raw.githubusercontent.com/nnnnkatsu/fx-chatgpt-mirror/main/data/usdjpy.json) |
+| ZARJPY | [data/zarjpy.json](https://raw.githubusercontent.com/nnnnkatsu/fx-chatgpt-mirror/main/data/zarjpy.json) |
+| MXNJPY | [data/mxnjpy.json](https://raw.githubusercontent.com/nnnnkatsu/fx-chatgpt-mirror/main/data/mxnjpy.json) |
 
-## 固定 RAW URL
+GBPUSD没有配置镜像。根目录zarjpy.json及examples目录是旧示例，不能用于实时交易。
 
-https://raw.githubusercontent.com/nnnnkatsu/fx-chatgpt-mirror/main/data/zarjpy.json
+## 数据和新鲜度
 
-- data/zarjpy.json：唯一正式镜像路径。
-- mirror.py：读取现有 analysis 文件，校验后通过 GitHub Contents API 推送同一份行情。
-- DEPLOYMENT.md：Sakura 最小接入、令牌配置、重试和验收。
-- tests/test_mirror.py：离线保真、时间、安全拒绝与冲突重试测试。
-- 根目录 zarjpy.json：旧版不可交易示例，仅为保留旧链接；不再更新，不用于监测。
-- examples/export.example.json：旧版输入格式示例，已不供新版脚本使用。
+保留原analysis六周期、指标、结构与蜡烛数据，不重算指标。源source仍为Twelve Data；generated_at_utc源未提供时为null。_mirror记录复制元数据，不冒充源生成时间。
 
-## 原数据保留原则
+每次以真实读取时间重新验证，并在给出新交易计划前复核：
 
-真实接口为：
-`ok / type / symbol / price / fetched_at_utc / cache_seconds / source / analysis`。
-analysis 原来就包含六个周期：1min、5min、15min、1h、4h、1day。
-各周期包含 timezone、latest_candle_at_utc、candle_age_seconds、current_candle、
-previous_closed_candle、indicators、structure、candles。全部保留，不重算技术指标。
+1. ok=true、type=analysis、货币一致、source=Twelve Data、price为正数。
+2. fetched_at_utc距实际当前UTC为0–300秒，未来时间拒绝。
+3. 校验generated_at_utc（若有）；缺失不补造。mirrored_at_utc只是镜像构建时间，不能替代源时间或上传完成时间。
+4. 六周期latest_candle_at_utc与current_candle.datetime_utc一致。读取时K线年龄上限：1min 360秒、5min 600秒、15min 1200秒、1h 3900秒、4h 14700秒、1day 86700秒。
+5. 源candle_age_seconds是快照生成时的年龄，不会自动增长；与fetched减latest的差允许60秒组装容差，但最终新鲜度必须按实际读取时间重算。
+6. 日线现使用显式UTC时间，并保留source_date/source_timezone及exchange_date_midnight说明；不能把交易所当地日期直接补Z当UTC午夜。current_candle不自动代表收盘确认。
+7. 超过60秒的快照不作为此刻精确可成交报价。HTTP200、最新提交或镜像上传成功都不能替代上述校验。市场关闭时不新增行情请求。
 
-源 source="Twelve Data"，不会改写为 Sakura。Sakura 是传输路径而非行情供应商。
-仅在缺失时补 pair="ZARJPY"、generated_at_utc=null；
-新增 _mirror 保存传输来源、包装时间、原对象 SHA256 和 mode=snapshot。
-如果源以后提供 generated_at_utc，则原样保留。不存在的生成时间不能用 fetched 或上传时间冒充。
-SHA256 针对排序、紧凑序列化后的原 JSON 对象，是保真检查值，不是来源签名。
-保留 JSON 字段和值；不保证空白、键顺序、数字文字格式逐字节相同。
+main版本陈旧或不明确时，通过GitHub连接器查询当前文件在main上的最新commit，再按本次返回的完整SHA读取；blob SHA不是commit SHA，历史验收SHA不能复用为实时结果。
 
-实际日线时间为 YYYY-MM-DDZ。它不是完整 ISO 时间；保留原值，校验时在源 timezone=UTC 条件下
-按该日期 00:00 UTC 解析，仅用于与源 candle_age 一致的年龄检查，不声称它是实际交易日开盘瞬间。
-current_candle 可能仍形成中，不自动视为收盘确认；收盘条件优先使用 previous_closed_candle。
+## 安全与运行
 
-## 新鲜度：每次读取重新计算
+不提交API key、GitHub token、Sakura密码或私有配置。GitHub凭据仅位于Sakura私有目录/既有Cron环境；具体权限和回滚说明见[事件同步说明](EVENT-SYNC.md)。mirror.py/cache_sync.py执行源验证、去重与有界GitHub重试；observed_sync.py保存不含响应正文和密钥的诊断。
 
-1. ok=true、type=analysis、symbol=ZAR/JPY、pair=ZARJPY、source=Twelve Data；
-   price 为正数，六周期和指标完整，否则拒绝。
-2. now - fetched_at_utc 必须在 0–300 秒。未来时间拒绝。
-3. generated_at_utc 若有值：必须不早于 fetched、不晚于当前时刻，年龄≤300秒。
-   当前源没有该字段，因此 null 明确表示无法独立验证生成时间；
-   本阶段依据 fetched + 各周期蜡烛时间交叉校验，不把 null 解释为“刚生成”。
-   若某任务强制要求独立生成时间，该任务应拒绝此快照，直到源能提供真实值。
-4. analysis[周期].latest_candle_at_utc 必须与 current_candle.datetime_utc 一致。
-   读取时重算年龄：1min≤360秒、5min≤600秒、15min≤1200秒、
-   H1≤3900秒、H4≤14700秒、D1≤86700秒；均不得为负。
-5. 原 candle_age_seconds 是生成响应时的值，不会随着 GitHub 缓存自动增长。
-   必须与 fetched - latest 的差值在60秒内，并使用读取时重新计算的年龄判过期。
-6. 周末或源停止更新也不重写时间来“保鲜”。先判断市场状态，再决定报休市或读取失败。
-7. _mirror.mirrored_at_utc 只表示包装时刻，不能替代任何行情时间戳。
-   fetched 的精确上游语义目前由公开接口提供；未审阅 Worker/Sakura 源码，故不能证明所有周期都在该时刻重新向 Twelve Data 拉取。
-   蜡烛交叉检查能发现明显旧数据，但不能证明形成中蜡烛的每一个价格都最新。
+本地回归：`python3 -m unittest discover -s tests -v`。此次手动流程接入只更新说明与项目使用规则，不修改服务器程序、API或采集日程。
 
-## 普通 ChatGPT 测试用规则
+## 验收与历史文档
 
-先尝试 Sakura v3.1 launcher（保持原 PATH nonce 流程）。
-仅当网页读取层拒绝或无法取得可用数据时，打开上述 RAW 链接。
-按本 README 验证 freshness，合格才进行 ZARJPY D1/H4/H1 分析；
-两个来源都无法读取或镜像过期，输出【实时读取失败】。
-普通 web reader 是否可稳定读取要独立实测，不能由本机 HTTP 200 推断。
-
-本次不修改现有定时任务，不扩展其他三个货币。
-交易背景仅为用户提供的记录：2026-09-24 已全部止损，FLAT，后续是 NEW FIRST TRANCHE，
-不是加仓。Carry/宏观及任何入场条件仍需分析时重新核实；此项目不产生交易指令。
-
-## 本地验证
-
-```sh
-python3 -m unittest discover -s tests -v
-python3 mirror.py /private/path/zarjpy-analysis.json --public-export-reviewed --output /private/path/preview.json
-```
-
-不要公开 private/、环境文件、服务器配置或任何密钥。
-
-## 配额保护改造
-
-详见 [QUOTA_PLAN.md](QUOTA_PLAN.md)。cache_sync.py 只读私有缓存；capture.php 是已接入的原响应落盘旁路；quota_gate.py 提供共享配额准入。
-主动采集配置默认关闭：额度、analysis 实际成本、现有检测时间及所有上游入口的统一接入尚未核实。其他货币尚未启用镜像。
+- [三货币事件同步验收](EVENT-SYNC-ACCEPTANCE-2026-09-30.md)
+- [浏览器手动ZAR验收](MANUAL-REFRESH.md#2026-10-01-实测证据jst)
+- [镜像诊断说明](MIRROR-DIAGNOSTICS.md)
+- DEPLOYMENT.md、QUOTA_PLAN.md、ACCEPTANCE-2026-09-28.md保留历史实施记录；其中“仅ZAR/预取未启用/等待部署”等状态不再代表当前部署。
