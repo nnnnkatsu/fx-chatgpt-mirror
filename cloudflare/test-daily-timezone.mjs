@@ -1,7 +1,7 @@
 ﻿import fs from 'node:fs';
 import assert from 'node:assert/strict';
 const code=fs.readFileSync(new URL('./worker.js',import.meta.url),'utf8').replace('import { DurableObject } from "cloudflare:workers";','class DurableObject { constructor() {} }');
-const {candleTimestamp,FxCoordinator}=await import('data:text/javascript;base64,'+Buffer.from(code).toString('base64'));
+const {candleTimestamp,FxCoordinator,sourceTiming}=await import('data:text/javascript;base64,'+Buffer.from(code).toString('base64'));
 assert.equal(candleTimestamp('2026-09-30','1day','Australia/Sydney'),'2026-09-29T14:00:00.000Z');
 assert.equal(candleTimestamp('2026-10-05','1day','Australia/Sydney'),'2026-10-04T13:00:00.000Z');
 assert.equal(candleTimestamp('2026-04-06','1day','Australia/Sydney'),'2026-04-05T14:00:00.000Z');
@@ -9,9 +9,23 @@ assert.equal(candleTimestamp('2026-09-30','1day','UTC'),'2026-09-30T00:00:00.000
 assert.equal(candleTimestamp('2026-09-29 23:35:00','1min'),'2026-09-29T23:35:00Z');
 assert.throws(()=>candleTimestamp('2026-09-30','1day','Invalid/Zone'));
 let count=0;
-globalThis.fetch=async url=>{count++;let u=new URL(url);return Response.json(u.pathname==='/price'?{price:'9.6'}:{meta:{exchange_timezone:'Australia/Sydney'},values:Array.from({length:160},()=>({datetime:u.searchParams.get('interval')==='1day'?'2026-09-30':'2026-09-29 23:35:00',open:'9.5',high:'9.7',low:'9.4',close:'9.6'}))});};
+globalThis.fetch=async url=>{count++;let u=new URL(url);return Response.json(u.pathname==='/price'?{price:'9.6'}:{meta:{exchange_timezone:'Australia/Sydney',interval:u.searchParams.get('interval')},values:Array.from({length:160},()=>({datetime:u.searchParams.get('interval')==='1day'?'2026-09-30':'2026-09-29 23:35:00',open:'9.5',high:'9.7',low:'9.4',close:'9.6'}))});};
 const RealDate=Date;globalThis.Date=class extends RealDate{constructor(...a){super(...(a.length?a:['2026-09-29T23:37:51.883Z']));}static now(){return RealDate.parse('2026-09-29T23:37:51.883Z');}};
 const map=new Map();const c=new FxCoordinator({storage:{get:async k=>structuredClone(map.get(k)),put:async(k,v)=>map.set(k,structuredClone(v))}},{TWELVE_DATA_API_KEY:'test-only',FX_BOOTSTRAP_USED_CREDITS:'0'});
 const r=await c.run('/zarjpy/analysis');assert.equal(r.status,200);assert.equal(count,7);const d=JSON.parse(r.body);const day=d.analysis['1day'];assert.equal(day.current_candle.datetime,'2026-09-30');assert.equal(day.latest_candle_at_utc,'2026-09-29T14:00:00.000Z');assert.equal(day.candle_age_seconds,34671);assert.equal(day.current_candle.source_timezone,'Australia/Sydney');
 fs.writeFileSync(new URL('../private/daily-regression.json',import.meta.url),r.body);
 console.log('PASS daily timezone, DST start/end, metadata timezone, intraday unchanged, full analysis 7 calls, source date preserved');
+
+assert.equal(day.source_timing.returned_interval,'1day');
+assert.equal(day.source_timing.exact_session_open_verified,false);
+assert.equal(d.analysis['1min'].source_timing.returned_interval,'1min');
+assert.equal(d.analysis['1min'].source_timing.interval_matches,true);
+const delayed=sourceTiming({meta:{interval:'1min',exchange_timezone:'Australia/Sydney'},values:[{datetime:'2026-09-29 23:30:00'}]},'1min',[{datetime_utc:'2026-09-29T23:30:00Z'}]);
+assert.equal(delayed.current_gate_valid_until_utc,'2026-09-29T23:36:00.000Z');
+assert.equal(delayed.candle_age_at_response_seconds,471.883);
+const mismatch=sourceTiming({meta:{interval:'5min'},values:[]},'1min',[]);
+assert.equal(mismatch.interval_matches,false);
+const safe=sourceTiming({meta:{interval:'secret-data',exchange_timezone:'Bearer PRIVATE'},values:[{datetime:'PRIVATE'}]},'1min',[]);
+assert.equal(safe.returned_interval,null);assert.equal(safe.exchange_timezone,null);assert.deepEqual(safe.latest_raw_datetimes,[null]);
+assert.equal(count,7);
+console.log('PASS upstream interval, raw dates, expiry diagnostics, metadata allowlist; still 7 requests');

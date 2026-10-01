@@ -385,7 +385,7 @@ async function fetchCandles(
 
   // Twelve Data 默认最新在前
   // 这里反转为 时间从旧 -> 新
-return data.values
+const candles = data.values
   .map(c => ({
     datetime: c.datetime,
     datetime_utc: candleTimestamp(c.datetime, interval, data.meta?.exchange_timezone),
@@ -403,6 +403,40 @@ return data.values
     return day !== 0 && day !== 6;
   })
   .reverse();
+  candles.sourceTiming = sourceTiming(data, interval, candles);
+  console.log(JSON.stringify({event:"source_candle_timing",symbol,...candles.sourceTiming}));
+  return candles;
+}
+
+// Diagnostic only: do not change candle dates, freshness limits, or request count.
+export function sourceTiming(data, requestedInterval, candles) {
+  const allowed = ["1min","5min","15min","1h","4h","1day"];
+  const date = v => typeof v === "string" && /^\d{4}-\d{2}-\d{2}(?: \d{2}:\d{2}:\d{2})?$/.test(v) ? v : null;
+  const returnedInterval = allowed.includes(data.meta?.interval) ? data.meta.interval : null;
+  let zone = null;
+  try {
+    const candidate = data.meta?.exchange_timezone;
+    if (typeof candidate === "string" && /^[A-Za-z_]+(?:\/[A-Za-z_+-]+)*$/.test(candidate)) {
+      new Intl.DateTimeFormat("en",{timeZone:candidate}); zone=candidate;
+    }
+  } catch {}
+  const rawDates = data.values.slice(0,6).map(c=>date(c.datetime));
+  const latest = candles.at(-1)?.datetime_utc || null;
+  const checked = new Date().toISOString();
+  const duration = {"1min":60,"5min":300,"15min":900,"1h":3600,"4h":14400,"1day":86400}[requestedInterval];
+  return {
+    requested_interval:requestedInterval,
+    returned_interval:returnedInterval,
+    interval_matches:returnedInterval === null ? null : returnedInterval === requestedInterval,
+    exchange_timezone:zone,
+    latest_raw_datetimes:rawDates,
+    checked_at_utc:checked,
+    latest_retained_at_utc:latest,
+    candle_age_at_response_seconds:latest ? (Date.parse(checked)-Date.parse(latest))/1000 : null,
+    current_gate_valid_until_utc:latest ? new Date(Date.parse(latest)+(duration+300)*1000).toISOString() : null,
+    timestamp_basis:requestedInterval === "1day" ? "exchange_date_midnight" : "provider_intraday_utc",
+    exact_session_open_verified:requestedInterval === "1day" ? false : null
+  };
 }
 
 
@@ -445,6 +479,7 @@ function buildAnalysis(candles) {
   );
 
   return {
+    source_timing: candles.sourceTiming,
     timezone: "UTC",
 
     latest_candle_at_utc:

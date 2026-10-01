@@ -18,6 +18,29 @@ def append_log(root, event):
         stream.write(json.dumps(event, allow_nan=False) + "\n")
 
 
+def candle_diagnostics(data, now):
+    """Whitelist timestamps and numeric ages; never copy raw source metadata."""
+    report = {}
+    for tf, duration in mirror.INTERVALS.items():
+        item = {"limit_seconds": duration + 300, "result": "unverifiable"}
+        try:
+            part = data["analysis"][tf]
+            latest = mirror.utc(part["latest_candle_at_utc"], daily=tf == "1day")
+            current = mirror.utc(part["current_candle"]["datetime_utc"], daily=tf == "1day")
+            age = (now - latest).total_seconds()
+            item.update(latest_candle_at_utc=mirror.stamp(latest), age_seconds=round(age, 3),
+                        timestamps_match=latest == current,
+                        result="pass" if latest == current and 0 <= age <= duration + 300 else "fail")
+            basis = part["current_candle"].get("timestamp_basis")
+            if basis == "exchange_date_midnight":
+                item["timestamp_basis"] = basis
+                item["exact_session_open_verified"] = False
+        except (KeyError, TypeError, ValueError, OverflowError):
+            pass
+        report[tf] = item
+    return report
+
+
 def observed_sync(root, token, pair, now=None, trigger="cron_fallback"):
     root = Path(root)
     now = now or datetime.now(timezone.utc)
@@ -45,6 +68,7 @@ def observed_sync(root, token, pair, now=None, trigger="cron_fallback"):
                 raise ValueError("oversized local source")
             data = json.loads(raw)
             mirror.no_secrets(data)
+            state["candle_diagnostics"] = candle_diagnostics(data, now)
             fetched = mirror.utc(data["fetched_at_utc"])
             state.update(local_fetched_at_utc=mirror.stamp(fetched),
                          local_cache_age_seconds=round((now-fetched).total_seconds(), 3),
@@ -76,6 +100,8 @@ def observed_sync(root, token, pair, now=None, trigger="cron_fallback"):
     state["consecutive_failures"] = previous.get("consecutive_failures", 0) + 1 if failed else 0
     state["consecutive_source_waits"] = previous.get("consecutive_source_waits", 0) + 1 if blocked else 0
     state["alert"] = "source_not_refreshing" if blocked else ("publish_or_validation_failure" if failed else None)
+    if state.get("reason") == "source_candles_expired":
+        state["alert"] = "source_candle_validation_failed"
     state["last_success"] = ({k:state.get(k) for k in ("fetched_at_utc", "mirrored_at_utc", "blob_sha", "commit_sha")}
                              if state["stage"] == "complete" else previous.get("last_success"))
     state["finished_at_utc"] = mirror.stamp(datetime.now(timezone.utc))

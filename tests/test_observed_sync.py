@@ -61,3 +61,25 @@ class ObservedTests(unittest.TestCase):
             s=observed_sync.observed_sync(self.root,'dummy','ZARJPY',self.now)
         self.assertTrue(s['update_attempted']); self.assertEqual(s['github_http_code'],403)
         self.assertNotIn('PRIVATE_EXAMPLE',json.dumps(s))
+
+    def test_fresh_fetch_stale_daily_is_identified_without_network(self):
+        part=self.data['analysis']['1day']
+        part['latest_candle_at_utc']=part['current_candle']['datetime_utc']='2026-09-24T10:00:00Z'
+        part['current_candle']['timestamp_basis']='exchange_date_midnight'
+        part['candle_age_seconds']=93600
+        self.put(self.data)
+        with patch('mirror.api') as api,patch('mirror.publish') as publish:
+            s=observed_sync.observed_sync(self.root,None,'ZARJPY',self.now)
+        self.assertEqual(s['reason'],'source_candles_expired')
+        self.assertEqual(s['alert'],'source_candle_validation_failed')
+        self.assertEqual(s['candle_diagnostics']['1day']['result'],'fail')
+        self.assertEqual(s['candle_diagnostics']['1day']['age_seconds'],93600)
+        self.assertFalse(s['candle_diagnostics']['1day']['exact_session_open_verified'])
+        self.assertEqual(s['candle_diagnostics']['1min']['result'],'pass')
+        api.assert_not_called(); publish.assert_not_called()
+
+    def test_diagnostic_malformed_timestamp_does_not_leak(self):
+        self.data['analysis']['1min']['latest_candle_at_utc']='PRIVATE_EXAMPLE'
+        s=observed_sync.candle_diagnostics(self.data,self.now)
+        self.assertEqual(s['1min']['result'],'unverifiable')
+        self.assertNotIn('PRIVATE_EXAMPLE',json.dumps(s))
