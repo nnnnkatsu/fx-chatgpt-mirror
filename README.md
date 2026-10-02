@@ -5,7 +5,7 @@
 ## 当前使用方式（2026-10-01）
 
 - **临时查询新行情：[浏览器手动触发正式流程](MANUAL-REFRESH.md)**。打开新的launcher，点击对应fresh analysis一次，再让ChatGPT读取镜像。没有新增刷新接口。
-- **定时检查：[当前JST时表](cloudflare/SCHEDULE-2026-09-30.md)**。Worker按既定时点预取，仍共用800 credits/日和8 credits/分钟额度控制；不为镜像新增采集。
+- **定时检查：[当前有限预取窗口](PREFETCH-WINDOW.md)**。检查时表不变；Worker在每轮前6分钟、前2分钟、后2分钟采集，最多546 credits/滚动24小时，共用800/日和8/短时间窗口的额度保护。镜像本身仍只读缓存。
 - **同步：[新缓存立即发布，120秒Cron补偿](EVENT-SYNC.md)**。源未改变不重复提交。GitHub读取不触发刷新。
 - **诊断：**Sakura保存私有运行日志；ChatGPT任务结果末尾保存读取端JSON诊断。当前GitHub连接器写入测试返回403，不假定任务能自动把日志写入本仓库。
 
