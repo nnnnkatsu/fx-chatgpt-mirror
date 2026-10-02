@@ -48,14 +48,20 @@ export class FxCoordinator extends DurableObject {
   }
 }
 
+// Three bounded attempts per check: cover observed early/late task execution.
+// No polling outside these slots; every attempt uses the existing shared ledger.
+export const PREFETCH_OFFSETS_MINUTES = [-6, -2, 2];
 export function scheduledPairs(ms) {
-  const j=new Date(ms+9*3600000), day=j.getUTCDay(), h=j.getUTCHours(), m=j.getUTCMinutes();
-  const weekday=day>=1 && day<=5;
-  const previousWeekday=day>=2 && day<=6;
-  if(weekday && m===4 && h>=8 && h<=23) return ["usdjpy"];
-  if(m===14 && ((weekday && [8,12,16,20].includes(h)) || (h===0 && previousWeekday))) return ["mxnjpy"];
-  if(m===39 && ((weekday && [8,12,16,20].includes(h)) || (h===0 && previousWeekday))) return ["zarjpy"];
-  return [];
+  const pairs = new Set();
+  for (const offset of PREFETCH_OFFSETS_MINUTES) {
+    const j = new Date(ms - offset*60000 + 9*3600000);
+    const day=j.getUTCDay(), h=j.getUTCHours(), m=j.getUTCMinutes();
+    const weekday=day>=1 && day<=5, previousWeekday=day>=2 && day<=6;
+    if(weekday && m===5 && h>=8 && h<=23) pairs.add("usdjpy");
+    if(m===15 && ((weekday && [8,12,16,20].includes(h)) || (h===0 && previousWeekday))) pairs.add("mxnjpy");
+    if(m===40 && ((weekday && [8,12,16,20].includes(h)) || (h===0 && previousWeekday))) pairs.add("zarjpy");
+  }
+  return [...pairs];
 }
 
 export default {
